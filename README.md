@@ -38,7 +38,7 @@ history for progress. Planned milestones:
 
 - [x] Project scaffold
 - [x] Landing page UI
-- [ ] GitHub API integration
+- [x] GitHub API integration
 - [ ] Resume parsing
 - [ ] Gemini API integration
 - [ ] AI-powered code & architecture analysis
