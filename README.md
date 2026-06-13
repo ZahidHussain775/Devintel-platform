@@ -37,14 +37,13 @@ This project is being built incrementally, feature by feature. See commit
 history for progress. Planned milestones:
 
 - [x] Project scaffold
-- [ ] Landing page UI
+- [x] Landing page UI
 - [ ] GitHub API integration
 - [ ] Resume parsing
 - [ ] Gemini API integration
 - [ ] AI-powered code & architecture analysis
 - [ ] Employability / Industry Readiness scoring engine
 - [ ] Skill gap report
-- [ ] Salary prediction
 - [ ] LinkedIn input
 - [ ] Results dashboard
 - [ ] Deployment + polish
