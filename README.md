@@ -39,7 +39,7 @@ history for progress. Planned milestones:
 - [x] Project scaffold
 - [x] Landing page UI
 - [x] GitHub API integration
-- [ ] Resume parsing
+- [x] Resume parsing
 - [ ] Gemini API integration
 - [ ] AI-powered code & architecture analysis
 - [ ] Employability / Industry Readiness scoring engine

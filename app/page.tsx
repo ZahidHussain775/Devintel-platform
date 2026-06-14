@@ -12,11 +12,13 @@ import {
   Target,
   ListChecks,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import { UploadCard } from "@/components/UploadCard";
 import { SkillHeatmap, type SkillRow } from "@/components/SkillHeatmap";
 import { GitHubStats } from "@/components/GitHubStats";
-import type { GitHubProfile } from "@/lib/types";
+import { ResumeStats } from "@/components/ResumeStats";
+import type { GitHubProfile, ResumeData } from "@/lib/types";
 
 const SAMPLE_SKILLS: SkillRow[] = [
   { label: "Frontend",     values: [2, 3, 4, 4, 3, 4, 4, 3, 4, 4, 4, 3] },
@@ -27,44 +29,78 @@ const SAMPLE_SKILLS: SkillRow[] = [
   { label: "DevOps",       values: [2, 2, 3, 2, 2, 3, 2, 2, 3, 2, 2, 2] },
 ];
 
-type FetchState =
+// Each input section has its own loading + error state
+type SectionState<T> =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "success"; data: GitHubProfile }
+  | { status: "success"; data: T }
   | { status: "error"; message: string };
 
 export default function Home() {
-  const [githubUsername, setGithubUsername] = useState("");
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [linkedinText, setLinkedinText] = useState("");
-  const [fetchState, setFetchState] = useState<FetchState>({ status: "idle" });
+  const [githubUsername, setGithubUsername]   = useState("");
+  const [resumeFile, setResumeFile]           = useState<File | null>(null);
+  const [linkedinText, setLinkedinText]       = useState("");
 
-  const canAnalyze = githubUsername.trim().length > 0;
+  // Separate state for each data source
+  const [githubState, setGithubState]   = useState<SectionState<GitHubProfile>>({ status: "idle" });
+  const [resumeState, setResumeState]   = useState<SectionState<ResumeData>>({ status: "idle" });
 
-  const handleAnalyze = async () => {
-    if (!canAnalyze) return;
-    setFetchState({ status: "loading" });
+  const canAnalyze =
+    githubUsername.trim().length > 0 ||
+    resumeFile !== null;
+
+  const isLoading =
+    githubState.status === "loading" ||
+    resumeState.status === "loading";
+
+  // ── Fetch GitHub data ──────────────────────────────────────────
+  async function fetchGitHub() {
+    if (!githubUsername.trim()) return;
+    setGithubState({ status: "loading" });
     try {
-      const res = await fetch(
-        `/api/github?username=${encodeURIComponent(githubUsername.trim())}`
-      );
+      const res  = await fetch(`/api/github?username=${encodeURIComponent(githubUsername.trim())}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to fetch GitHub data");
-      setFetchState({ status: "success", data });
+      setGithubState({ status: "success", data });
     } catch (err) {
-      setFetchState({
-        status: "error",
-        message: err instanceof Error ? err.message : "Unknown error",
-      });
+      setGithubState({ status: "error", message: err instanceof Error ? err.message : "Unknown error" });
     }
-  };
+  }
 
-  const isLoading = fetchState.status === "loading";
-  const showResults = fetchState.status === "success";
+  // ── Parse resume PDF ───────────────────────────────────────────
+  async function parseResume() {
+    if (!resumeFile) return;
+    setResumeState({ status: "loading" });
+    try {
+      // Build a FormData object — this is how you send a file to an API
+      // FormData is like a package that wraps the file for sending over HTTP
+      const formData = new FormData();
+      formData.append("resume", resumeFile);  // "resume" matches what the API expects
+
+      const res  = await fetch("/api/resume", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to parse resume");
+      setResumeState({ status: "success", data });
+    } catch (err) {
+      setResumeState({ status: "error", message: err instanceof Error ? err.message : "Unknown error" });
+    }
+  }
+
+  // ── Analyze button — kick off both fetches in parallel ─────────
+  async function handleAnalyze() {
+    if (!canAnalyze || isLoading) return;
+    // Run both at the same time — no reason to wait for one before starting the other
+    await Promise.all([fetchGitHub(), parseResume()]);
+  }
+
+  const showGitHub = githubState.status === "success";
+  const showResume = resumeState.status === "success";
+  const showAny    = showGitHub || showResume;
 
   return (
     <div className="flex min-h-full flex-col bg-(--color-canvas)">
-      {/* Header */}
+
+      {/* ── Header ──────────────────────────────────────────────── */}
       <header className="border-b border-(--color-border)">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
@@ -87,10 +123,12 @@ export default function Home() {
         </div>
       </header>
 
+      {/* ── Main ────────────────────────────────────────────────── */}
       <main className="mx-auto flex-1 px-6 py-12 sm:py-16 w-full">
         <div className="mx-auto max-w-6xl">
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
-            {/* Left: pitch + inputs */}
+
+            {/* ── Left: inputs ──────────────────────────────────── */}
             <div>
               <span className="font-mono text-xs tracking-widest text-(--color-accent)">
                 AI DEVELOPER INTELLIGENCE
@@ -99,56 +137,86 @@ export default function Home() {
                 Know exactly where you stand as a developer.
               </h1>
               <p className="mt-4 max-w-lg text-(--color-text-muted)">
-                Upload your GitHub profile, resume, and LinkedIn summary.
-                DevIntel reads your code — not just your keywords — and turns
-                it into a clear, honest picture of your skills, gaps, and
-                readiness for the job market.
+                Upload your GitHub profile and resume. DevIntel reads your
+                code — not just your keywords — and turns it into a clear,
+                honest picture of your skills, gaps, and readiness for the
+                job market.
               </p>
 
               <div className="mt-8 flex flex-col gap-3">
+
+                {/* GitHub username */}
                 <UploadCard
                   icon={FolderGit2}
                   step="01"
                   title="GitHub profile"
                   description="We'll analyze your public repos, code structure, and documentation."
                 >
-                  <div className="flex items-center rounded-md border border-(--color-border) bg-(--color-canvas) px-3 py-2 focus-within:border-(--color-accent-dim)">
-                    <span className="font-mono text-sm text-(--color-text-faint)">
-                      github.com/
-                    </span>
-                    <input
-                      type="text"
-                      value={githubUsername}
-                      onChange={(e) => setGithubUsername(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
-                      placeholder="your-username"
-                      className="w-full bg-transparent font-mono text-sm text-(--color-text) outline-none placeholder:text-(--color-text-faint)"
-                    />
+                  <div className="flex items-center gap-2">
+                    <div className="flex flex-1 items-center rounded-md border border-(--color-border) bg-(--color-canvas) px-3 py-2 focus-within:border-(--color-accent-dim)">
+                      <span className="font-mono text-sm text-(--color-text-faint)">
+                        github.com/
+                      </span>
+                      <input
+                        type="text"
+                        value={githubUsername}
+                        onChange={(e) => setGithubUsername(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
+                        placeholder="your-username"
+                        className="w-full bg-transparent font-mono text-sm text-(--color-text) outline-none placeholder:text-(--color-text-faint)"
+                      />
+                    </div>
+                    {/* Inline status icon */}
+                    {githubState.status === "success" && (
+                      <CheckCircle2 size={18} className="shrink-0 text-(--color-accent)" />
+                    )}
+                    {githubState.status === "loading" && (
+                      <Loader2 size={18} className="shrink-0 animate-spin text-(--color-text-faint)" />
+                    )}
                   </div>
+                  {githubState.status === "error" && (
+                    <p className="mt-1.5 text-xs text-red-400">{githubState.message}</p>
+                  )}
                 </UploadCard>
 
+                {/* Resume upload */}
                 <UploadCard
                   icon={FileUp}
                   step="02"
                   title="Resume"
-                  description="PDF format. Used to cross-reference your stated skills and experience."
+                  description="PDF format. We extract your skills, experience, and education."
                 >
-                  <label className="flex cursor-pointer items-center justify-between rounded-md border border-dashed border-(--color-border) bg-(--color-canvas) px-3 py-2 text-sm text-(--color-text-muted) transition-colors hover:border-(--color-accent-dim)">
-                    <span className="truncate">
-                      {resumeFile ? resumeFile.name : "Choose a PDF file"}
-                    </span>
-                    <span className="ml-3 shrink-0 font-mono text-xs text-(--color-accent)">
-                      Browse
-                    </span>
-                    <input
-                      type="file"
-                      accept="application/pdf"
-                      className="hidden"
-                      onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
-                    />
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <label className="flex flex-1 cursor-pointer items-center justify-between rounded-md border border-dashed border-(--color-border) bg-(--color-canvas) px-3 py-2 text-sm text-(--color-text-muted) transition-colors hover:border-(--color-accent-dim)">
+                      <span className="truncate">
+                        {resumeFile ? resumeFile.name : "Choose a PDF file"}
+                      </span>
+                      <span className="ml-3 shrink-0 font-mono text-xs text-(--color-accent)">
+                        Browse
+                      </span>
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          setResumeFile(e.target.files?.[0] ?? null);
+                          setResumeState({ status: "idle" }); // reset if new file picked
+                        }}
+                      />
+                    </label>
+                    {resumeState.status === "success" && (
+                      <CheckCircle2 size={18} className="shrink-0 text-(--color-accent)" />
+                    )}
+                    {resumeState.status === "loading" && (
+                      <Loader2 size={18} className="shrink-0 animate-spin text-(--color-text-faint)" />
+                    )}
+                  </div>
+                  {resumeState.status === "error" && (
+                    <p className="mt-1.5 text-xs text-red-400">{resumeState.message}</p>
+                  )}
                 </UploadCard>
 
+                {/* LinkedIn */}
                 <UploadCard
                   icon={IdCard}
                   step="03"
@@ -165,16 +233,17 @@ export default function Home() {
                 </UploadCard>
               </div>
 
-              <div className="mt-6 flex flex-col gap-3">
+              {/* Analyze button */}
+              <div className="mt-6">
                 <button
                   onClick={handleAnalyze}
                   disabled={!canAnalyze || isLoading}
-                  className="flex items-center justify-center gap-2 rounded-md bg-(--color-accent) px-5 py-3 text-sm font-semibold text-(--color-canvas) transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex w-full items-center justify-center gap-2 rounded-md bg-(--color-accent) px-5 py-3 text-sm font-semibold text-(--color-canvas) transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {isLoading ? (
                     <>
                       <Loader2 size={16} className="animate-spin" />
-                      Fetching GitHub data…
+                      Analyzing…
                     </>
                   ) : (
                     <>
@@ -183,36 +252,49 @@ export default function Home() {
                     </>
                   )}
                 </button>
-
-                {fetchState.status === "error" && (
-                  <p className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-xs text-red-400">
-                    {fetchState.message}
-                  </p>
-                )}
               </div>
             </div>
 
-            {/* Right panel */}
-            <div>
-              {showResults ? (
-                /* Live GitHub data */
-                <div className="rounded-lg border border-(--color-border) bg-(--color-surface) p-5 sm:p-6">
-                  <div className="mb-4 flex items-center justify-between">
-                    <span className="font-mono text-xs tracking-widest text-(--color-text-faint)">
-                      GITHUB PROFILE
-                    </span>
-                    <span className="rounded-full bg-(--color-accent)/10 px-2 py-0.5 font-mono text-[10px] text-(--color-accent)">
-                      LIVE
-                    </span>
-                  </div>
-                  <GitHubStats profile={fetchState.data} />
-                  <p className="mt-5 text-xs text-(--color-text-faint)">
-                    Resume parsing + AI analysis coming next — GitHub data
-                    collected ✓
+            {/* ── Right: results panel ───────────────────────────── */}
+            <div className="flex flex-col gap-4">
+              {showAny ? (
+                <>
+                  {/* GitHub results */}
+                  {showGitHub && (
+                    <div className="rounded-lg border border-(--color-border) bg-(--color-surface) p-5">
+                      <div className="mb-4 flex items-center justify-between">
+                        <span className="font-mono text-xs tracking-widest text-(--color-text-faint)">
+                          GITHUB PROFILE
+                        </span>
+                        <span className="rounded-full bg-(--color-accent)/10 px-2 py-0.5 font-mono text-[10px] text-(--color-accent)">
+                          LIVE
+                        </span>
+                      </div>
+                      <GitHubStats profile={githubState.data} />
+                    </div>
+                  )}
+
+                  {/* Resume results */}
+                  {showResume && (
+                    <div className="rounded-lg border border-(--color-border) bg-(--color-surface) p-5">
+                      <div className="mb-4 flex items-center justify-between">
+                        <span className="font-mono text-xs tracking-widest text-(--color-text-faint)">
+                          RESUME PARSED
+                        </span>
+                        <span className="rounded-full bg-(--color-accent)/10 px-2 py-0.5 font-mono text-[10px] text-(--color-accent)">
+                          LIVE
+                        </span>
+                      </div>
+                      <ResumeStats resume={resumeState.data} />
+                    </div>
+                  )}
+
+                  <p className="text-xs text-(--color-text-faint)">
+                    AI analysis coming next — data collected ✓
                   </p>
-                </div>
+                </>
               ) : (
-                /* Static sample while nothing is fetched yet */
+                /* Sample preview while idle */
                 <div className="relative overflow-hidden rounded-lg border border-(--color-border) bg-(--color-surface) p-5 sm:p-6">
                   <div className="scanline pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-(--color-accent)/10 to-transparent" />
                   <div className="flex items-center justify-between">
@@ -237,8 +319,8 @@ export default function Home() {
                     </div>
                   </div>
                   <p className="mt-6 text-xs leading-relaxed text-(--color-text-muted)">
-                    Enter your GitHub username on the left to replace this
-                    with your real data.
+                    Enter your GitHub username or upload your resume on the left
+                    to replace this with your real data.
                   </p>
                 </div>
               )}
@@ -246,11 +328,9 @@ export default function Home() {
           </div>
 
           {/* How it works */}
-          {!showResults && (
+          {!showAny && (
             <div className="mt-20 border-t border-(--color-border) pt-12">
-              <h2 className="font-display text-2xl font-semibold">
-                How it works
-              </h2>
+              <h2 className="font-display text-2xl font-semibold">How it works</h2>
               <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-3">
                 <Step number="01" title="Upload" description="Share your GitHub username, resume, and (optionally) LinkedIn summary." />
                 <Step number="02" title="AI analyzes" description="DevIntel reads your repos, code structure, docs, and resume to build a profile." />
@@ -261,16 +341,11 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Footer */}
+      {/* ── Footer ──────────────────────────────────────────────── */}
       <footer className="border-t border-(--color-border)">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-6 text-xs text-(--color-text-faint) sm:flex-row sm:items-center sm:justify-between">
           <span>Built incrementally, one feature at a time.</span>
-          <a
-            href="https://github.com/ZahidHussain775/Devintel-platform"
-            target="_blank"
-            rel="noreferrer"
-            className="transition-colors hover:text-(--color-text-muted)"
-          >
+          <a href="https://github.com/ZahidHussain775/Devintel-platform" target="_blank" rel="noreferrer" className="transition-colors hover:text-(--color-text-muted)">
             github.com/ZahidHussain775/Devintel-platform
           </a>
         </div>

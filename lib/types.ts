@@ -1,3 +1,28 @@
+// Resume types
+
+export type ResumeData = {
+  rawText: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  skills: string[];
+  experience: ExperienceEntry[];
+  education: EducationEntry[];
+  totalExperienceYears: number;
+};
+
+export type ExperienceEntry = {
+  title: string;
+  company: string;
+  duration: string;
+};
+
+export type EducationEntry = {
+  degree: string;
+  institution: string;
+  year: string;
+};
+
 // GitHub API types
 
 export type GitHubUser = {
