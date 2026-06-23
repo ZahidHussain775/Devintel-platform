@@ -1,4 +1,4 @@
-// Resume types
+// ─── Resume types ─────────────────────────────────────────────────────────────
 
 export type ResumeData = {
   rawText: string;
@@ -23,7 +23,7 @@ export type EducationEntry = {
   year: string;
 };
 
-// GitHub API types
+// ─── GitHub API types ─────────────────────────────────────────────────────────
 
 export type GitHubUser = {
   login: string;
@@ -67,4 +67,38 @@ export type GitHubProfile = {
   topTopics: string[];
   accountAgeDays: number;
   hasReadmeCount: number;
+};
+
+// ─── AI Analysis types ────────────────────────────────────────────────────────
+
+export type ProficiencyLevel = "beginner" | "intermediate" | "advanced" | "expert";
+
+export type LanguageProficiency = {
+  language: string;
+  level: ProficiencyLevel;
+  evidence: string;
+};
+
+export type ProjectQuality = {
+  repoName: string;
+  score: number; // 0–10
+  strengths: string[];
+  weaknesses: string[];
+};
+
+export type SkillGap = {
+  skill: string;
+  importance: "high" | "medium" | "low";
+  suggestion: string;
+};
+
+export type AnalysisResult = {
+  overallScore: number;          // 0–100
+  documentationScore: number;    // 0–100
+  consistencyScore: number;      // 0–100
+  languageProficiency: LanguageProficiency[];
+  projectQuality: ProjectQuality[];
+  architectureInsights: string[];
+  skillGaps: SkillGap[];
+  summary: string;
 };

@@ -1,41 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateJSON } from "@/lib/groq";
-import type { GitHubProfile } from "@/lib/types";
-import type { CodeAnalysis } from "@/lib/analysisTypes";
+import type { GitHubProfile, ResumeData, AnalysisResult } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { githubProfile, resumeText } = body as {
-      githubProfile: GitHubProfile;
-      resumeText?: string;
+    const { githubProfile, resumeData, linkedinText } = body as {
+      githubProfile: GitHubProfile | null;
+      resumeData: ResumeData | null;
+      linkedinText: string | null;
     };
 
-    if (!githubProfile) {
+    if (!githubProfile && !resumeData) {
       return NextResponse.json(
-        { error: "githubProfile is required" },
+        { error: "At least one of githubProfile or resumeData is required" },
         { status: 400 }
       );
     }
 
-    const { user, repos, languages, totalStars, totalForks, accountAgeDays, hasReadmeCount, topTopics } = githubProfile;
+    // ── Build GitHub section ──────────────────────────────────────────────────
+    let githubSection = "";
+    if (githubProfile) {
+      const { user, repos, languages, totalStars, totalForks, accountAgeDays, hasReadmeCount, topTopics } = githubProfile;
 
-    // Build a compact summary of the profile to send to Groq
-    const repoSummary = repos.slice(0, 10).map((r) => ({
-      name: r.name,
-      description: r.description,
-      language: r.language,
-      stars: r.stargazers_count,
-      forks: r.forks_count,
-      topics: r.topics,
-      hasReadme: r.has_readme,
-      size: r.size,
-    }));
+      const repoSummary = repos.slice(0, 10).map((r) => ({
+        name:        r.name,
+        description: r.description,
+        language:    r.language,
+        stars:       r.stargazers_count,
+        forks:       r.forks_count,
+        topics:      r.topics,
+        hasReadme:   r.has_readme,
+        size:        r.size,
+      }));
 
-    const prompt = `
-You are an expert software engineering evaluator. Analyze this developer's GitHub profile and resume, then return a JSON object with your assessment.
-
-## Developer Profile
+      githubSection = `
+## GitHub Profile
 - Username: ${user.login}
 - Account age: ${accountAgeDays} days
 - Public repos: ${user.public_repos}
@@ -50,18 +50,59 @@ ${languages.map((l) => `- ${l.language}: ${l.percentage}%`).join("\n")}
 
 ## Top Repositories
 ${JSON.stringify(repoSummary, null, 2)}
+`;
+    }
 
-${resumeText ? `## Resume Text\n${resumeText.slice(0, 2000)}` : ""}
+    // ── Build resume section ──────────────────────────────────────────────────
+    let resumeSection = "";
+    if (resumeData) {
+      resumeSection = `
+## Resume
+- Name: ${resumeData.name ?? "Unknown"}
+- Total experience: ${resumeData.totalExperienceYears} years
+- Skills detected: ${resumeData.skills.join(", ") || "none"}
+
+### Work Experience
+${resumeData.experience.length > 0
+  ? resumeData.experience.map((e) => `- ${e.title}${e.company ? ` at ${e.company}` : ""} (${e.duration})`).join("\n")
+  : "No experience entries found"}
+
+### Education
+${resumeData.education.length > 0
+  ? resumeData.education.map((e) => `- ${e.degree}${e.institution ? ` — ${e.institution}` : ""}${e.year ? ` (${e.year})` : ""}`).join("\n")
+  : "No education entries found"}
+
+### Resume Raw Text (first 1500 chars)
+${resumeData.rawText.slice(0, 1500)}
+`;
+    }
+
+    // ── Build LinkedIn section ────────────────────────────────────────────────
+    const linkedinSection = linkedinText
+      ? `\n## LinkedIn Summary\n${linkedinText.slice(0, 800)}\n`
+      : "";
+
+    // ── Full prompt ───────────────────────────────────────────────────────────
+    const prompt = `
+You are an expert software engineering evaluator. Analyze this developer's profile and return a JSON assessment.
+
+${githubSection}
+${resumeSection}
+${linkedinSection}
 
 ## Instructions
+Evaluate the developer holistically using ALL data provided above — GitHub activity, resume experience, and LinkedIn if present.
 Return ONLY a valid JSON object with this exact structure (no markdown, no explanation):
+
 {
   "overallScore": <number 0-100>,
+  "documentationScore": <number 0-100>,
+  "consistencyScore": <number 0-100>,
   "languageProficiency": [
     {
       "language": "<string>",
-      "level": "<beginner|intermediate|advanced>",
-      "evidence": "<one sentence>"
+      "level": "<beginner|intermediate|advanced|expert>",
+      "evidence": "<one sentence referencing specific repos or resume entries>"
     }
   ],
   "projectQuality": [
@@ -73,13 +114,18 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no expla
     }
   ],
   "architectureInsights": ["<string>"],
-  "documentationScore": <number 0-100>,
-  "consistencyScore": <number 0-100>,
-  "summary": "<2-3 sentence overall assessment>"
+  "skillGaps": [
+    {
+      "skill": "<string>",
+      "importance": "<high|medium|low>",
+      "suggestion": "<one actionable sentence>"
+    }
+  ],
+  "summary": "<2-3 sentence overall assessment using all data sources>"
 }
 `;
 
-    const analysis = await generateJSON<CodeAnalysis>(prompt);
+    const analysis = await generateJSON<AnalysisResult>(prompt);
 
     return NextResponse.json(analysis);
   } catch (err) {

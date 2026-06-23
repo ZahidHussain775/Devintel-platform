@@ -14,12 +14,14 @@ import {
   Loader2,
   CheckCircle2,
 } from "lucide-react";
-import { UploadCard } from "@/components/UploadCard";
+import { UploadCard }      from "@/components/UploadCard";
 import { SkillHeatmap, type SkillRow } from "@/components/SkillHeatmap";
-import { GitHubStats } from "@/components/GitHubStats";
-import { ResumeStats } from "@/components/ResumeStats";
-import type { GitHubProfile, ResumeData } from "@/lib/types";
+import { GitHubStats }     from "@/components/GitHubStats";
+import { ResumeStats }     from "@/components/ResumeStats";
+import { AnalysisReport }  from "@/components/AnalysisReport";
+import type { GitHubProfile, ResumeData, AnalysisResult } from "@/lib/types";
 
+// ─── Sample heatmap shown in the idle preview ─────────────────────────────────
 const SAMPLE_SKILLS: SkillRow[] = [
   { label: "Frontend",     values: [2, 3, 4, 4, 3, 4, 4, 3, 4, 4, 4, 3] },
   { label: "Backend",      values: [3, 3, 2, 3, 4, 3, 3, 4, 3, 3, 2, 3] },
@@ -29,78 +31,123 @@ const SAMPLE_SKILLS: SkillRow[] = [
   { label: "DevOps",       values: [2, 2, 3, 2, 2, 3, 2, 2, 3, 2, 2, 2] },
 ];
 
-// Each input section has its own loading + error state
+// ─── Generic section state — one per data source ──────────────────────────────
 type SectionState<T> =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "success"; data: T }
   | { status: "error"; message: string };
 
+// ─────────────────────────────────────────────────────────────────────────────
 export default function Home() {
-  const [githubUsername, setGithubUsername]   = useState("");
-  const [resumeFile, setResumeFile]           = useState<File | null>(null);
-  const [linkedinText, setLinkedinText]       = useState("");
+  const [githubUsername, setGithubUsername] = useState("");
+  const [resumeFile,     setResumeFile]     = useState<File | null>(null);
+  const [linkedinText,   setLinkedinText]   = useState("");
 
-  // Separate state for each data source
-  const [githubState, setGithubState]   = useState<SectionState<GitHubProfile>>({ status: "idle" });
-  const [resumeState, setResumeState]   = useState<SectionState<ResumeData>>({ status: "idle" });
+  const [githubState,   setGithubState]   = useState<SectionState<GitHubProfile>>({ status: "idle" });
+  const [resumeState,   setResumeState]   = useState<SectionState<ResumeData>>({ status: "idle" });
+  const [analysisState, setAnalysisState] = useState<SectionState<AnalysisResult>>({ status: "idle" });
 
   const canAnalyze =
-    githubUsername.trim().length > 0 ||
-    resumeFile !== null;
+    githubUsername.trim().length > 0 || resumeFile !== null;
 
   const isLoading =
-    githubState.status === "loading" ||
-    resumeState.status === "loading";
+    githubState.status   === "loading" ||
+    resumeState.status   === "loading" ||
+    analysisState.status === "loading";
 
-  // ── Fetch GitHub data ──────────────────────────────────────────
-  async function fetchGitHub() {
-    if (!githubUsername.trim()) return;
+  // ── Fetch GitHub profile ────────────────────────────────────────────────────
+  async function fetchGitHub(): Promise<GitHubProfile | null> {
+    if (!githubUsername.trim()) return null;
     setGithubState({ status: "loading" });
     try {
       const res  = await fetch(`/api/github?username=${encodeURIComponent(githubUsername.trim())}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to fetch GitHub data");
       setGithubState({ status: "success", data });
+      return data;
     } catch (err) {
       setGithubState({ status: "error", message: err instanceof Error ? err.message : "Unknown error" });
+      return null;
     }
   }
 
-  // ── Parse resume PDF ───────────────────────────────────────────
-  async function parseResume() {
-    if (!resumeFile) return;
+  // ── Parse resume PDF ────────────────────────────────────────────────────────
+  async function parseResume(): Promise<ResumeData | null> {
+    if (!resumeFile) return null;
     setResumeState({ status: "loading" });
     try {
-      // Build a FormData object — this is how you send a file to an API
-      // FormData is like a package that wraps the file for sending over HTTP
       const formData = new FormData();
-      formData.append("resume", resumeFile);  // "resume" matches what the API expects
-
+      formData.append("resume", resumeFile);
       const res  = await fetch("/api/resume", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to parse resume");
       setResumeState({ status: "success", data });
+      return data;
     } catch (err) {
       setResumeState({ status: "error", message: err instanceof Error ? err.message : "Unknown error" });
+      return null;
     }
   }
 
-  // ── Analyze button — kick off both fetches in parallel ─────────
-  async function handleAnalyze() {
-    if (!canAnalyze || isLoading) return;
-    // Run both at the same time — no reason to wait for one before starting the other
-    await Promise.all([fetchGitHub(), parseResume()]);
+  // ── Run AI analysis ─────────────────────────────────────────────────────────
+  // Sends githubProfile + resumeData + linkedinText to /api/analyze
+  // so Groq has the full context — not just GitHub stats.
+  async function runAIAnalysis(
+    githubProfile: GitHubProfile | null,
+    resumeData: ResumeData | null,
+  ): Promise<void> {
+    // Need at least one data source
+    if (!githubProfile && !resumeData) return;
+
+    setAnalysisState({ status: "loading" });
+    try {
+      const res  = await fetch("/api/analyze", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          githubProfile,
+          resumeData,
+          linkedinText: linkedinText.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Analysis failed");
+      setAnalysisState({ status: "success", data });
+    } catch (err) {
+      setAnalysisState({ status: "error", message: err instanceof Error ? err.message : "Unknown error" });
+    }
   }
 
-  const showGitHub = githubState.status === "success";
-  const showResume = resumeState.status === "success";
-  const showAny    = showGitHub || showResume;
+  // ── Main handler — fetch data sources in parallel, then run AI ──────────────
+  async function handleAnalyze() {
+    if (!canAnalyze || isLoading) return;
 
+    // Reset analysis so old results don't linger while new ones load
+    setAnalysisState({ status: "idle" });
+
+    // Fetch GitHub + parse resume at the same time
+    const [githubProfile, resumeData] = await Promise.all([
+      fetchGitHub(),
+      parseResume(),
+    ]);
+
+    // Run AI once we have something to analyse
+    if (githubProfile || resumeData) {
+      await runAIAnalysis(githubProfile, resumeData);
+    }
+  }
+
+  const showGitHub   = githubState.status   === "success";
+  const showResume   = resumeState.status   === "success";
+  const showAnalysis = analysisState.status === "success";
+  const showAny      = showGitHub || showResume;
+
+  // ────────────────────────────────────────────────────────────────────────────
   return (
     <div className="flex min-h-full flex-col bg-(--color-canvas)">
 
-      {/* ── Header ──────────────────────────────────────────────── */}
+      {/* ── Header ───────────────────────────────────────────────────────────── */}
       <header className="border-b border-(--color-border)">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
@@ -123,12 +170,12 @@ export default function Home() {
         </div>
       </header>
 
-      {/* ── Main ────────────────────────────────────────────────── */}
+      {/* ── Main ─────────────────────────────────────────────────────────────── */}
       <main className="mx-auto flex-1 px-6 py-12 sm:py-16 w-full">
         <div className="mx-auto max-w-6xl">
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
 
-            {/* ── Left: inputs ──────────────────────────────────── */}
+            {/* ── Left: inputs ─────────────────────────────────────────────── */}
             <div>
               <span className="font-mono text-xs tracking-widest text-(--color-accent)">
                 AI DEVELOPER INTELLIGENCE
@@ -145,7 +192,7 @@ export default function Home() {
 
               <div className="mt-8 flex flex-col gap-3">
 
-                {/* GitHub username */}
+                {/* Step 01 — GitHub username */}
                 <UploadCard
                   icon={FolderGit2}
                   step="01"
@@ -166,7 +213,6 @@ export default function Home() {
                         className="w-full bg-transparent font-mono text-sm text-(--color-text) outline-none placeholder:text-(--color-text-faint)"
                       />
                     </div>
-                    {/* Inline status icon */}
                     {githubState.status === "success" && (
                       <CheckCircle2 size={18} className="shrink-0 text-(--color-accent)" />
                     )}
@@ -179,28 +225,27 @@ export default function Home() {
                   )}
                 </UploadCard>
 
-                {/* Resume upload */}
+                {/* Step 02 — Resume PDF */}
                 <UploadCard
                   icon={FileUp}
                   step="02"
-                  title="Resume"
-                  description="PDF format. We extract your skills, experience, and education."
+                  title="Resume / CV"
+                  description="Upload your PDF resume. We extract skills, experience, and education."
                 >
                   <div className="flex items-center gap-2">
-                    <label className="flex flex-1 cursor-pointer items-center justify-between rounded-md border border-dashed border-(--color-border) bg-(--color-canvas) px-3 py-2 text-sm text-(--color-text-muted) transition-colors hover:border-(--color-accent-dim)">
-                      <span className="truncate">
-                        {resumeFile ? resumeFile.name : "Choose a PDF file"}
-                      </span>
-                      <span className="ml-3 shrink-0 font-mono text-xs text-(--color-accent)">
-                        Browse
+                    <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-md border border-(--color-border) bg-(--color-canvas) px-3 py-2 text-sm text-(--color-text-muted) transition-colors hover:border-(--color-accent-dim) hover:text-(--color-text)">
+                      <FileUp size={14} className="shrink-0" />
+                      <span className="truncate font-mono text-sm">
+                        {resumeFile ? resumeFile.name : "Choose PDF…"}
                       </span>
                       <input
                         type="file"
-                        accept="application/pdf"
-                        className="hidden"
+                        accept=".pdf"
+                        className="sr-only"
                         onChange={(e) => {
-                          setResumeFile(e.target.files?.[0] ?? null);
-                          setResumeState({ status: "idle" }); // reset if new file picked
+                          const file = e.target.files?.[0] ?? null;
+                          setResumeFile(file);
+                          setResumeState({ status: "idle" });
                         }}
                       />
                     </label>
@@ -216,7 +261,7 @@ export default function Home() {
                   )}
                 </UploadCard>
 
-                {/* LinkedIn */}
+                {/* Step 03 — LinkedIn (optional) */}
                 <UploadCard
                   icon={IdCard}
                   step="03"
@@ -243,7 +288,9 @@ export default function Home() {
                   {isLoading ? (
                     <>
                       <Loader2 size={16} className="animate-spin" />
-                      Analyzing…
+                      {analysisState.status === "loading"
+                        ? "Running AI analysis…"
+                        : "Fetching data…"}
                     </>
                   ) : (
                     <>
@@ -255,7 +302,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* ── Right: results panel ───────────────────────────── */}
+            {/* ── Right: results panel ──────────────────────────────────────── */}
             <div className="flex flex-col gap-4">
               {showAny ? (
                 <>
@@ -289,12 +336,28 @@ export default function Home() {
                     </div>
                   )}
 
-                  <p className="text-xs text-(--color-text-faint)">
-                    AI analysis coming next — data collected ✓
-                  </p>
+                  {/* AI analysis — loading state */}
+                  {analysisState.status === "loading" && (
+                    <div className="flex items-center gap-3 rounded-lg border border-(--color-border) bg-(--color-surface) p-5 text-sm text-(--color-text-muted)">
+                      <Loader2 size={15} className="animate-spin text-(--color-accent)" />
+                      Running AI analysis…
+                    </div>
+                  )}
+
+                  {/* AI analysis — error state */}
+                  {analysisState.status === "error" && (
+                    <div className="rounded-lg border border-red-900/40 bg-(--color-surface) p-4">
+                      <p className="text-xs text-red-400">{analysisState.message}</p>
+                    </div>
+                  )}
+
+                  {/* AI analysis — results */}
+                  {showAnalysis && (
+                    <AnalysisReport result={analysisState.data} />
+                  )}
                 </>
               ) : (
-                /* Sample preview while idle */
+                /* ── Idle preview ──────────────────────────────────────────── */
                 <div className="relative overflow-hidden rounded-lg border border-(--color-border) bg-(--color-surface) p-5 sm:p-6">
                   <div className="scanline pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-(--color-accent)/10 to-transparent" />
                   <div className="flex items-center justify-between">
@@ -327,12 +390,12 @@ export default function Home() {
             </div>
           </div>
 
-          {/* How it works */}
+          {/* ── How it works — shown only before first analysis ────────────── */}
           {!showAny && (
             <div className="mt-20 border-t border-(--color-border) pt-12">
               <h2 className="font-display text-2xl font-semibold">How it works</h2>
               <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-3">
-                <Step number="01" title="Upload" description="Share your GitHub username, resume, and (optionally) LinkedIn summary." />
+                <Step number="01" title="Upload"      description="Share your GitHub username, resume, and (optionally) LinkedIn summary." />
                 <Step number="02" title="AI analyzes" description="DevIntel reads your repos, code structure, docs, and resume to build a profile." />
                 <Step number="03" title="Get your report" description="Receive scores, a skill gap report, and clear next steps to improve." />
               </div>
@@ -341,11 +404,16 @@ export default function Home() {
         </div>
       </main>
 
-      {/* ── Footer ──────────────────────────────────────────────── */}
+      {/* ── Footer ───────────────────────────────────────────────────────────── */}
       <footer className="border-t border-(--color-border)">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-6 text-xs text-(--color-text-faint) sm:flex-row sm:items-center sm:justify-between">
           <span>Built incrementally, one feature at a time.</span>
-          <a href="https://github.com/ZahidHussain775/Devintel-platform" target="_blank" rel="noreferrer" className="transition-colors hover:text-(--color-text-muted)">
+          <a
+            href="https://github.com/ZahidHussain775/Devintel-platform"
+            target="_blank"
+            rel="noreferrer"
+            className="transition-colors hover:text-(--color-text-muted)"
+          >
             github.com/ZahidHussain775/Devintel-platform
           </a>
         </div>
@@ -354,7 +422,17 @@ export default function Home() {
   );
 }
 
-function ScoreBadge({ icon: Icon, label, value }: { icon: typeof Gauge; label: string; value: string }) {
+// ─── Small helpers ────────────────────────────────────────────────────────────
+
+function ScoreBadge({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Gauge;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-md border border-(--color-border) bg-(--color-canvas) p-3">
       <Icon size={14} className="text-(--color-accent)" />
@@ -364,7 +442,15 @@ function ScoreBadge({ icon: Icon, label, value }: { icon: typeof Gauge; label: s
   );
 }
 
-function Step({ number, title, description }: { number: string; title: string; description: string }) {
+function Step({
+  number,
+  title,
+  description,
+}: {
+  number: string;
+  title: string;
+  description: string;
+}) {
   return (
     <div className="flex flex-col gap-2">
       <span className="font-mono text-sm text-(--color-accent)">{number}</span>
