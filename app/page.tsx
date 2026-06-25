@@ -12,12 +12,9 @@ import {
   Gauge,
   Target,
   ListChecks,
-  Loader2,
   CheckCircle2,
   X,
   Brain,
-  GitBranch,
-  FileText,
   Briefcase,
   Download,
 } from "lucide-react";
@@ -37,12 +34,6 @@ const SAMPLE_SKILLS: SkillRow[] = [
   { label: "Docs",         values: [4, 4, 3, 4, 4, 4, 3, 4, 4, 4, 4, 4] },
   { label: "Testing",      values: [1, 1, 2, 1, 2, 1, 1, 2, 1, 1, 2, 1] },
   { label: "DevOps",       values: [2, 2, 3, 2, 2, 3, 2, 2, 3, 2, 2, 2] },
-];
-
-const LOADING_STEPS = [
-  { icon: GitBranch, label: "Fetching GitHub profile & repositories…" },
-  { icon: FileText,  label: "Parsing resume and extracting skills…"   },
-  { icon: Brain,     label: "Running AI analysis with Groq…"          },
 ];
 
 const ROLE_SUGGESTIONS = [
@@ -72,16 +63,17 @@ export default function Home() {
   const [githubState,   setGithubState]   = useState<SectionState<GitHubProfile>>({ status: "idle" });
   const [resumeState,   setResumeState]   = useState<SectionState<ResumeData>>({ status: "idle" });
   const [analysisState, setAnalysisState] = useState<SectionState<AnalysisResult>>({ status: "idle" });
-  const [loadingStep,   setLoadingStep]   = useState(0);
+
 
   // Ref for the printable report area
   const reportRef = useRef<HTMLDivElement>(null);
 
   const canAnalyze = githubUsername.trim().length > 0 || resumeFile !== null;
-  const isLoading  =
-    githubState.status   === "loading" ||
-    resumeState.status   === "loading" ||
-    analysisState.status === "loading";
+  const [analyzing, setAnalyzing] = useState(false);
+  const isLoading = analyzing ||
+      githubState.status   === "loading" ||
+      resumeState.status   === "loading" ||
+      analysisState.status === "loading";
 
   const showGitHub   = githubState.status   === "success";
   const showResume   = resumeState.status   === "success";
@@ -117,7 +109,6 @@ export default function Home() {
   async function fetchGitHub(): Promise<GitHubProfile | null> {
     if (!githubUsername.trim()) return null;
     setGithubState({ status: "loading" });
-    setLoadingStep(0);
     try {
       const res  = await fetch(`/api/github?username=${encodeURIComponent(githubUsername.trim())}`);
       const data = await res.json();
@@ -134,7 +125,6 @@ export default function Home() {
   async function parseResume(): Promise<ResumeData | null> {
     if (!resumeFile) return null;
     setResumeState({ status: "loading" });
-    setLoadingStep(1);
     try {
       const formData = new FormData();
       formData.append("resume", resumeFile);
@@ -156,7 +146,6 @@ export default function Home() {
   ): Promise<void> {
     if (!githubProfile && !resumeData) return;
     setAnalysisState({ status: "loading" });
-    setLoadingStep(2);
     try {
       const res  = await fetch("/api/analyze", {
         method:  "POST",
@@ -179,55 +168,21 @@ export default function Home() {
   // ── Main handler ────────────────────────────────────────────────────────────
   async function handleAnalyze() {
     if (!canAnalyze || isLoading) return;
+    setAnalyzing(true);
     setAnalysisState({ status: "idle" });
     const [githubProfile, resumeData] = await Promise.all([fetchGitHub(), parseResume()]);
     if (githubProfile || resumeData) await runAIAnalysis(githubProfile, resumeData);
-  }
-
+    setAnalyzing(false);
+}
   // ────────────────────────────────────────────────────────────────────────────
   return (
     <div className="flex min-h-full flex-col bg-(--color-canvas)">
 
-      {/* ── Full-screen loading overlay ──────────────────────────────────────── */}
-      {isLoading && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 bg-(--color-canvas)">
-          <div className="relative flex h-20 w-20 items-center justify-center">
-            <div className="absolute inset-0 rounded-full border-2 border-(--color-border)" />
-            <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-(--color-accent)" />
-            <Sparkles size={28} className="text-(--color-accent)" />
-          </div>
-          <div className="flex flex-col items-center gap-3">
-            {LOADING_STEPS.map((step, i) => {
-              const Icon     = step.icon;
-              const isDone   = i < loadingStep;
-              const isActive = i === loadingStep;
-              return (
-                <div key={i} className="flex items-center gap-3"
-                  style={{ opacity: isDone ? 0.4 : isActive ? 1 : 0.25 }}>
-                  {isDone   ? <CheckCircle2 size={16} className="shrink-0 text-(--color-accent)" />
-                  : isActive ? <Loader2 size={16} className="shrink-0 animate-spin text-(--color-accent)" />
-                  :            <Icon size={16} className="shrink-0 text-(--color-text-faint)" />}
-                  <span className="font-mono text-sm"
-                    style={{ color: isActive ? "var(--color-text)" : "var(--color-text-faint)" }}>
-                    {step.label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          {targetRole && (
-            <span className="rounded-full border border-(--color-border) px-3 py-1 font-mono text-xs text-(--color-text-faint)">
-              Analyzing for: {targetRole}
-            </span>
-          )}
-          <p className="font-mono text-xs text-(--color-text-faint)">This may take 10–20 seconds</p>
-        </div>
-      )}
-
-      {/* ── Full-screen analysis report ───────────────────────────────────────── */}
-      {showAnalysis && (
+      {/* ── Full-screen report + skeleton view ───────────────────────────────── */}
+      {(showAnalysis || analysisState.status === "loading") && (
         <div className="fixed inset-0 z-40 overflow-y-auto bg-(--color-canvas)">
           <div className="mx-auto max-w-4xl px-6 py-12">
+
             {/* Report header */}
             <div className="mb-8 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -240,21 +195,21 @@ export default function Home() {
                   </h2>
                   {targetRole && (
                     <span className="font-mono text-xs text-(--color-text-faint)">
-                      Analyzed for: <span className="text-(--color-accent)">{targetRole}</span>
+                      Analyzed for:{" "}
+                      <span className="text-(--color-accent)">{targetRole}</span>
                     </span>
                   )}
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {/* Export PDF button */}
                 <button
                   onClick={() => handlePrint()}
-                  className="flex items-center gap-2 rounded-md border border-(--color-border) bg-(--color-surface) px-3 py-2 text-sm text-(--color-text-muted) transition-colors hover:border-(--color-accent-dim) hover:text-(--color-accent)"
+                  disabled={analysisState.status === "loading"}
+                  className="flex items-center gap-2 rounded-md border border-(--color-border) bg-(--color-surface) px-3 py-2 text-sm text-(--color-text-muted) transition-colors hover:border-(--color-accent-dim) hover:text-(--color-accent) disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Download size={14} />
                   Export PDF
                 </button>
-                {/* Back button */}
                 <button
                   onClick={() => setAnalysisState({ status: "idle" })}
                   className="flex items-center gap-2 rounded-md border border-(--color-border) bg-(--color-surface) px-3 py-2 text-sm text-(--color-text-muted) transition-colors hover:border-(--color-accent-dim) hover:text-(--color-text)"
@@ -265,19 +220,35 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Printable area */}
-            <div ref={reportRef}>
-              {/* Print-only header */}
-              <div className="hidden print:block mb-6">
-                <h1 className="font-display text-2xl font-semibold">DevIntel — Developer Intelligence Report</h1>
-                {githubUsername && <p className="font-mono text-sm mt-1">github.com/{githubUsername}</p>}
-                {targetRole    && <p className="font-mono text-sm">Target role: {targetRole}</p>}
-                <p className="font-mono text-xs mt-1 opacity-50">
-                  Generated {new Date().toLocaleDateString()}
-                </p>
+            {/* Skeleton while AI runs / real report when done */}
+            {analysisState.status === "loading" ? (
+              <div className="flex flex-col gap-6">
+                {/* Step indicators while AI runs */}
+                <div className="flex flex-col items-center gap-3 rounded-lg border border-(--color-border) bg-(--color-surface) py-8">
+                  <div className="relative flex h-12 w-12 items-center justify-center">
+                    <div className="absolute inset-0 rounded-full border-2 border-(--color-border)" />
+                    <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-(--color-accent)" />
+                    <Brain size={18} className="text-(--color-accent)" />
+                  </div>
+                  <p className="font-mono text-sm text-(--color-text-muted)">
+                    Running AI analysis… this takes 10–20 seconds
+                  </p>
+                </div>
+                {/* Skeleton of the report below */}
+                <AnalysisSkeleton />
               </div>
-              <AnalysisReport result={analysisState.data} />
-            </div>
+            ) : showAnalysis ? (
+              <div ref={reportRef}>
+                {/* Print-only header */}
+                <div className="hidden print:block mb-6">
+                  <h1 className="font-display text-2xl font-semibold">DevIntel — Developer Intelligence Report</h1>
+                  {githubUsername && <p className="font-mono text-sm mt-1">github.com/{githubUsername}</p>}
+                  {targetRole    && <p className="font-mono text-sm">Target role: {targetRole}</p>}
+                  <p className="font-mono text-xs mt-1 opacity-50">Generated {new Date().toLocaleDateString()}</p>
+                </div>
+                <AnalysisReport result={analysisState.data} />
+              </div>
+            ) : null}
           </div>
         </div>
       )}

@@ -28,23 +28,41 @@ export async function POST(req: NextRequest) {
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
 
-    // Import the module then grab the real default — avoids the Windows
-    // ENOENT bug where pdf-parse tries to open its own test fixture on import.
+    // pdfjs-dist in legacy mode — no worker needed on the server
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pdfModule = (await import("pdf-parse/lib/pdf-parse.js")) as any;
-    const pdfParse  = pdfModule.default ?? pdfModule;
+    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs") as any;
+    // Use fake worker for Node.js — no browser worker needed
+    const { GlobalWorkerOptions } = pdfjsLib;
+    GlobalWorkerOptions.workerSrc = new URL(
+      "pdfjs-dist/legacy/build/pdf.worker.mjs",
+      import.meta.url
+    ).toString();
 
-    const pdfData = await pdfParse(buffer, {
-      // Passing a no-op version function stops pdf-parse from trying
-      // to read test files off disk during initialisation.
-      version: "default",
-    });
+    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+    const pdf = await loadingTask.promise;
 
-    const resumeData = parseResumeText(pdfData.text);
+    let fullText = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+     let lastY: number | null = null;
+      const pageText = content.items
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((item: any) => {
+          const line = lastY !== null && Math.abs(item.transform[5] - lastY) > 5
+            ? "\n" + item.str
+            : item.str;
+          lastY = item.transform[5];
+          return line;
+        })
+        .join(" ");
+      fullText += pageText + "\n";
+    }
 
+    const resumeData = parseResumeText(fullText);
     return NextResponse.json(resumeData);
+
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to parse resume";
     return NextResponse.json({ error: message }, { status: 500 });

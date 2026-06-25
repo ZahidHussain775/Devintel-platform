@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+   serverExternalPackages: ["pdf-parse"],
 };
+
 
 export default nextConfig;
