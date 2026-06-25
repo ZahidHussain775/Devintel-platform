@@ -247,19 +247,44 @@ export function AnalysisReport({ result }: { result: AnalysisResult }) {
           <div className="mb-4">
             <SectionHeader icon={Activity} label="SKILL HEATMAP" />
           </div>
-          <SkillHeatmap rows={heatmapRows} animate />
-          {/* Legend */}
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-[10px] text-(--color-text-faint)">none</span>
-            {[0, 1, 2, 3, 4].map((v) => (
-              <span key={v} className="h-3 w-3 rounded-[3px]"
-                style={{
-                  backgroundColor: ["var(--heat-0)","var(--heat-1)","var(--heat-2)","var(--heat-3)","var(--heat-4)"][v],
-                  border: v === 0 ? "1px solid var(--color-border)" : undefined,
-                }} />
-            ))}
-            <span className="text-[10px] text-(--color-text-faint)">expert</span>
-          </div>
+          {/* Heatmap with per-row score */}
+        <div className="flex flex-col gap-2.5">
+          {heatmapRows.map((row) => {
+            const avg   = Math.round(row.values.reduce((a, b) => a + b, 0) / row.values.length * 25);
+            const color = avg >= 70 ? "#39d353" : avg >= 40 ? "#d29922" : "#f87171";
+            const label = avg >= 75 ? "Expert" : avg >= 50 ? "Advanced" : avg >= 25 ? "Intermediate" : "Beginner";
+            return (
+              <div key={row.label} className="flex items-center gap-3">
+                {/* Heatmap cells */}
+                <div className="flex-1">
+                  <SkillHeatmap rows={[row]} animate />
+                </div>
+                {/* Score pill */}
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <span className="font-mono text-xs font-bold w-7 text-right" style={{ color }}>
+                    {avg}
+                  </span>
+                  <span className="rounded-full px-2 py-0.5 font-mono text-[10px]"
+                    style={{ color, background: `${color}18`, border: `1px solid ${color}30` }}>
+                    {label}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {/* Legend */}
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>none</span>
+          {[0,1,2,3,4].map((v) => (
+            <span key={v} className="h-2.5 w-2.5 rounded-[3px]"
+              style={{
+                backgroundColor: ["var(--heat-0)","var(--heat-1)","var(--heat-2)","var(--heat-3)","var(--heat-4)"][v],
+                border: v === 0 ? "1px solid var(--color-border)" : undefined,
+              }} />
+          ))}
+          <span className="text-[10px]" style={{ color: "var(--color-text-faint)" }}>expert</span>
+        </div>
         </div>
       )}
 
@@ -313,7 +338,7 @@ export function AnalysisReport({ result }: { result: AnalysisResult }) {
                     {pq.repoName}
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs text-(--color-text-faint)">
+                    <span className="font-mono text-xs text)">
                       {pq.score}/10
                     </span>
                     <span

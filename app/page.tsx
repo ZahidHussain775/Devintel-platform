@@ -124,7 +124,6 @@ export default function Home() {
         body: JSON.stringify({
           githubProfile,
           resumeData,
-          linkedinText: linkedinText.trim() || null,
           targetRole:   targetRole.trim()   || null,
         }),
       });
@@ -347,18 +346,9 @@ export default function Home() {
                   )}
                 </UploadCard>
 
+              
                 {/* Step 03 */}
-                <UploadCard icon={IdCard} step="03" title="LinkedIn summary"
-                  description="Optional — paste your headline and about section." delay="0.35">
-                  <textarea value={linkedinText} onChange={e => setLinkedinText(e.target.value)}
-                    placeholder="Paste your LinkedIn headline and summary here..."
-                    rows={2}
-                    className="input-glow w-full resize-none rounded-lg px-3 py-2 text-sm outline-none"
-                    style={{ border: "1px solid var(--color-border)", background: "var(--color-canvas)", color: "var(--color-text)", transition: "all 0.2s" }} />
-                </UploadCard>
-
-                {/* Step 04 */}
-                <UploadCard icon={Briefcase} step="04" title="Target role"
+                <UploadCard icon={Briefcase} step="03" title="Target role"
                   description="Optional but recommended — skill gaps will be role-specific." delay="0.45">
                   <input type="text" value={targetRole}
                     onChange={e => setTargetRole(e.target.value)}
