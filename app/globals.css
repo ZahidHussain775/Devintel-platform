@@ -1,24 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  /* Canvas + surfaces — borrowed from the GitHub dark UI this tool analyzes */
-  --color-canvas: #0d1117;
-  --color-surface: #161b22;
-  --color-surface-2: #1c2129;
-  --color-border: #30363d;
+  --color-canvas:     #0a0e13;
+  --color-surface:    #111620;
+  --color-surface-2:  #181e2a;
+  --color-border:     #222d3d;
+  --color-border-glow:#2ea04366;
 
-  /* Text */
-  --color-text: #e6edf3;
+  --color-text:       #e6edf3;
   --color-text-muted: #8b949e;
-  --color-text-faint: #6e7681;
+  --color-text-faint: #4d5966;
 
-  /* Accents */
-  --color-accent: #39d353;
+  --color-accent:     #39d353;
   --color-accent-dim: #2ea043;
-  --color-blue: #58a6ff;
-  --color-amber: #d29922;
+  --color-blue:       #58a6ff;
+  --color-amber:      #d29922;
+  --color-purple:     #bc8cff;
 
-  /* Heatmap scale (matches GitHub's contribution graph levels) */
   --heat-0: #161b22;
   --heat-1: #0e4429;
   --heat-2: #006d32;
@@ -26,74 +24,209 @@
   --heat-4: #39d353;
 
   --font-display: var(--font-space-grotesk);
-  --font-sans: var(--font-inter);
-  --font-mono: var(--font-jetbrains-mono);
+  --font-sans:    var(--font-inter);
+  --font-mono:    var(--font-jetbrains-mono);
+
+  /* Glow values */
+  --glow-accent: 0 0 20px rgba(57,211,83,0.15), 0 0 40px rgba(57,211,83,0.05);
+  --glow-blue:   0 0 20px rgba(88,166,255,0.15);
 }
 
 @theme inline {
-  --color-canvas: var(--color-canvas);
-  --color-surface: var(--color-surface);
-  --color-surface-2: var(--color-surface-2);
-  --color-border: var(--color-border);
-  --color-text: var(--color-text);
+  --color-canvas:     var(--color-canvas);
+  --color-surface:    var(--color-surface);
+  --color-surface-2:  var(--color-surface-2);
+  --color-border:     var(--color-border);
+  --color-text:       var(--color-text);
   --color-text-muted: var(--color-text-muted);
   --color-text-faint: var(--color-text-faint);
-  --color-accent: var(--color-accent);
+  --color-accent:     var(--color-accent);
   --color-accent-dim: var(--color-accent-dim);
-  --color-blue: var(--color-blue);
-  --color-amber: var(--color-amber);
-
-  --font-display: var(--font-display);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+  --color-blue:       var(--color-blue);
+  --color-amber:      var(--color-amber);
+  --color-purple:     var(--color-purple);
+  --font-display:     var(--font-display);
+  --font-sans:        var(--font-sans);
+  --font-mono:        var(--font-mono);
 }
+
+/* ── Base ──────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
 
 body {
   background: var(--color-canvas);
   color: var(--color-text);
   font-family: var(--font-sans), system-ui, sans-serif;
+  /* Subtle dot-grid background */
+  background-image: radial-gradient(circle, #1e2a3a 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-attachment: fixed;
 }
 
-/* Signature "scan" animation for the skill heatmap */
+/* ── Noise texture overlay ─────────────────────────────────────────────────── */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.4;
+}
+
+/* ── Glass card ────────────────────────────────────────────────────────────── */
+.glass {
+  background: rgba(17, 22, 32, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--color-border);
+}
+
+.glass-hover {
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.glass-hover:hover {
+  border-color: var(--color-accent-dim);
+  box-shadow: var(--glow-accent);
+}
+
+/* ── Gradient text ─────────────────────────────────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #39d353 0%, #58a6ff 50%, #bc8cff 100%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradient-shift 4s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ── Blinking cursor ───────────────────────────────────────────────────────── */
+.cursor::after {
+  content: "|";
+  animation: blink 1s step-end infinite;
+  color: var(--color-accent);
+  margin-left: 2px;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* ── Button shimmer ────────────────────────────────────────────────────────── */
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.btn-shimmer::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -75%;
+  width: 50%;
+  height: 200%;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(255,255,255,0.15) 50%,
+    transparent 100%
+  );
+  transform: skewX(-15deg);
+  animation: shimmer 2.5s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%   { left: -75%; }
+  100% { left: 150%; }
+}
+
+/* ── Slide-in stagger ──────────────────────────────────────────────────────── */
+.slide-in {
+  opacity: 0;
+  transform: translateY(20px);
+  animation: slide-in 0.5s ease forwards;
+}
+@keyframes slide-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.slide-in-1 { animation-delay: 0.1s; }
+.slide-in-2 { animation-delay: 0.2s; }
+.slide-in-3 { animation-delay: 0.3s; }
+.slide-in-4 { animation-delay: 0.4s; }
+.slide-in-5 { animation-delay: 0.5s; }
+
+/* ── Float animation ───────────────────────────────────────────────────────── */
+.float {
+  animation: float 4s ease-in-out infinite;
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0px);   }
+  50%       { transform: translateY(-8px);  }
+}
+
+/* ── Fade-in ───────────────────────────────────────────────────────────────── */
+.fade-in {
+  opacity: 0;
+  animation: fade-in 0.6s ease forwards;
+}
+@keyframes fade-in {
+  to { opacity: 1; }
+}
+
+/* ── Heatmap cell ──────────────────────────────────────────────────────────── */
 @keyframes cell-reveal {
-  from {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: scale(0.5); }
+  to   { opacity: 1; transform: scale(1);   }
 }
-
 .heatmap-cell {
   animation: cell-reveal 0.35s ease-out both;
 }
 
+/* ── Scanline ──────────────────────────────────────────────────────────────── */
 @keyframes scanline {
-  0% {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-  10% {
-    opacity: 1;
-  }
-  90% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(100%);
-    opacity: 0;
-  }
+  0%   { transform: translateX(-100%); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateX(100%);  opacity: 0; }
+}
+.scanline { animation: scanline 2.4s ease-in-out infinite; }
+
+/* ── Glow pulse ────────────────────────────────────────────────────────────── */
+.glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(57,211,83,0.2); }
+  50%       { box-shadow: 0 0 20px rgba(57,211,83,0.5); }
 }
 
-.scanline {
-  animation: scanline 2.4s ease-in-out infinite;
+/* ── Input glow focus ──────────────────────────────────────────────────────── */
+.input-glow:focus-within {
+  border-color: var(--color-accent-dim) !important;
+  box-shadow: 0 0 0 3px rgba(57,211,83,0.1), 0 0 12px rgba(57,211,83,0.1);
 }
 
+/* ── Section reveal ────────────────────────────────────────────────────────── */
+.section-reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  animation: slide-in 0.5s ease forwards;
+}
+
+/* ── Reduce motion ─────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .heatmap-cell,
-  .scanline {
+  .heatmap-cell, .scanline, .float, .slide-in,
+  .btn-shimmer::after, .gradient-text, .glow-pulse {
     animation: none !important;
+  }
+  .gradient-text {
+    -webkit-text-fill-color: var(--color-accent);
   }
 }
