@@ -43,4 +43,4 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : "Failed to parse resume";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}g
+}
