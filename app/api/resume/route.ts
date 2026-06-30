@@ -1,16 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseResumeText } from "@/lib/resumeParser";
-
-// ── DOMMatrix polyfill ──────────────────────────────────────────────────────
-// pdf-parse pulls in pdfjs-dist internally, which expects browser canvas
-// APIs (DOMMatrix) even though we never render anything — only extract text.
-// Vercel's Node.js serverless runtime has no DOM, so we stub it out.
-if (typeof globalThis.DOMMatrix === "undefined") {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (globalThis as any).DOMMatrix = class DOMMatrix {
-    constructor() {}
-  };
-}
+import { extractText, getDocumentProxy } from "unpdf";
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,18 +29,18 @@ export async function POST(req: NextRequest) {
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const uint8Array   = new Uint8Array(arrayBuffer);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pdfModule = (await import("pdf-parse")) as any;
-    const pdfParse  = pdfModule.default?.default ?? pdfModule.default ?? pdfModule;
-    const pdfData   = await pdfParse(buffer);
+    // unpdf is built for serverless/edge runtimes — no DOM, no canvas,
+    // no DOMMatrix dependency. Works cleanly on Vercel.
+    const pdf = await getDocumentProxy(uint8Array);
+    const { text } = await extractText(pdf, { mergePages: true });
 
-    const resumeData = parseResumeText(pdfData.text);
+    const resumeData = parseResumeText(text);
     return NextResponse.json(resumeData);
 
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to parse resume";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+}g
