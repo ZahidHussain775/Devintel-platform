@@ -2,6 +2,8 @@
 
 > Know exactly where you stand as a developer.
 
+**Live demo:** [devintel-platform.vercel.app](https://devintel-platform.vercel.app/)
+
 DevIntel analyzes a developer's GitHub profile and resume using AI to generate
 a honest, data-driven picture of their skills, project quality, and job-readiness.
 
@@ -47,7 +49,7 @@ Plus:
 | Styling | Tailwind CSS v4 + glassmorphism + custom animations |
 | AI | Groq API — `llama-3.3-70b-versatile` (128k context, free tier) |
 | Data | GitHub REST API |
-| Resume parsing | `pdfjs-dist` (legacy build, no worker) |
+| Resume parsing | `unpdf` (serverless-safe, no DOM dependencies) |
 | PDF export | `react-to-print` |
 | Icons | `lucide-react` |
 | Fonts | Space Grotesk · Inter · JetBrains Mono |
@@ -89,7 +91,7 @@ Plus:
 - [x] Clear / reset per data source
 - [x] Target role input with quick-select chips
 - [x] Glassmorphism UI redesign with animations
-- [ ] Deployment to Vercel
+- [x] Deployment to Vercel
 
 ---
 
@@ -127,7 +129,7 @@ app/
   layout.tsx                  # Fonts, metadata
   api/
     github/route.ts           # Fetches GitHub profile + repos + languages
-    resume/route.ts           # Parses PDF resume with pdfjs-dist
+    resume/route.ts           # Parses PDF resume with unpdf
     analyze/route.ts          # Groq AI analysis with role-specific prompting
     groq-test/route.ts        # Connection health check
 
@@ -150,4 +152,4 @@ lib/
 
 ## Author
 
-Built by [Zahid Hussain](https://github.com/ZahidHussain775) — BSCS Batch 2022, Sukkur IBA University.
+Built by [Zahid Hussain](https://github.com/ZahidHussain775) — BSCS Batch 2022, Sukkur IBA University.git add README.md
